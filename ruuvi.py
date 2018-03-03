@@ -196,7 +196,7 @@ class Ruuvi:
       self.airPressure = 0
 
     def __str__(self):
-      str = '{{temperature: "{}" humidity: "{}" pressure: "{}"}}'.format(self.temperature, self.humidity, self.pressure)
+      str = '{{temperature: "{}" humidity: "{}" pressure: "{}" battery: "{}"}}'.format(self.temperature, self.humidity, self.pressure, self.battery)
       return str
 
   def getRealtimeData(self):
@@ -213,10 +213,15 @@ class Ruuvi:
     pressure = (self.eddystoneHash[4] * 256.0) + 50000.0 + self.eddystoneHash[5]
     pressure = pressure / 100.0
 
+    battery = 100.0
+    if len(self.eddystoneHash) >= 14:
+      battery = (self.eddystoneHash[12] * 256.0) + self.eddystoneHash[13]
+
     realtimeData = Ruuvi.RealtimeData()
     realtimeData.humidity = humidity
     realtimeData.temperature = temperature
     realtimeData.pressure = pressure
+    realtimeData.battery = battery
 
     return realtimeData
 
