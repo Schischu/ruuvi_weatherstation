@@ -50,12 +50,13 @@ def main(argv):
     realtimeData = device.getRealtimeData()
 
     tag = {}
-    tag["sensor_name"] = device.name
-    sensorId = device.id.lower()
+    tag["sensor_id"] = device.mac.lower()
+    sensorId = device.mac.lower()
 
     tag["air_temperature"] = realtimeData.temperature
     tag["air_humidity"] = realtimeData.humidity
     tag["air_pressure"] = realtimeData.pressure
+    tag["battery"] = realtimeData.battery
 
     now = datetime.utcnow()
     tag["last_utc"] = now.strftime("%Y-%m-%dT%H:%M:%SZ") #2017-11-13T17:44:11Z
