@@ -20,10 +20,21 @@ class DeviceInformation:
   localName = ""
   flags = 0
   adData = ""
+  maData = ""
   addr = ""
   rssi = 0.0
   uuid = None
   id = ""
+
+  def __init__(self):
+    self.localName = ""
+    self.flags = 0
+    self.adData = ""
+    self.maData = ""
+    self.addr = ""
+    self.rssi = 0.0
+    self.uuid = None
+    self.id = ""
 
 class RuuviScanner:
 
@@ -35,6 +46,16 @@ class RuuviScanner:
       return False
 
     if adData[0] != 0xAA or adData[1] != 0xFE:
+      #print "Not Eddystone:", adData[0], adData[1]
+      return False
+
+    return True
+
+  def _isRuuviRawData(self, maData):
+    if maData is None or len(maData) < 15:
+      return False
+
+    if maData[0] != 0x99 or maData[1] != 0x04:
       return False
 
     return True
@@ -75,13 +96,17 @@ class RuuviScanner:
       deviceInformation.addr         = device.addr
       deviceInformation.rssi         = device.rssi
 
-      deviceInformation.localName    = device.getValueText(0x09) #Local Name
+      #deviceInformation.localName    = device.getValueText(0x09) #Local Name
+      #deviceInformation.localName    = device.getValueText(0x09) #Local Name
 
       flags        = device.getValueText(0x01) #Flags
       if flags is not None:
         deviceInformation.flags        = int(flags, 16)
 
       deviceInformation.adData = device.getValueText(0x16) # Service Data - 16-bit UUID
+      deviceInformation.maData = device.getValueText(0xFF) # Manufacturer Specific Data - 16-bit UUID
+
+      foundRuuvi = False
 
       if deviceInformation.adData is not None:
         hexAdData =  bytearray.fromhex(deviceInformation.adData)
@@ -96,19 +121,39 @@ class RuuviScanner:
             deviceInformation.adData = eddystoneHash
             deviceInformation.id = "{}{}".format(deviceInformation.addr[-5:-3], deviceInformation.addr[-2:]).upper()
 
-          print "-"*60
-          print "deviceInformation.flags:", deviceInformation.flags
-          print "deviceInformation.addr:", deviceInformation.addr
-          print "deviceInformation.rssi:", deviceInformation.rssi
-          print "deviceInformation.id:", deviceInformation.id
-          print "deviceInformation.localName:", deviceInformation.localName
-          print "deviceInformation.adData:", deviceInformation.adData
-          print "deviceInformation.uuid:", deviceInformation.uuid
+          foundRuuvi = True
 
-          tag = Ruuvi(deviceInformation)
+        #else:
+        #  print "Ignored:",  deviceInformation.addr, "(Cause: Not Eddystone", hexAdData[0], hexAdData[1], ")"
+      elif deviceInformation.maData is not None:
+        hexMaData =  bytearray.fromhex(deviceInformation.maData)
+        print "deviceInformation.maData:", hexMaData
+        if self._isRuuviRawData(hexMaData):
 
-          print "Found Ruu.vi:", tag
-          ruuviDevices.append(tag)
+          deviceInformation.adData = hexMaData[2:]
+
+          foundRuuvi = True
+
+          #9904034e1a2eb3dbffec000c03e80c1900000000
+
+      #else:
+      #  print "Ignored:",  deviceInformation.addr, "(Cause: No adData and no maData)"
+
+      if foundRuuvi:
+        print "-"*60
+        print "deviceInformation.flags:", deviceInformation.flags
+        print "deviceInformation.addr:", deviceInformation.addr
+        print "deviceInformation.rssi:", deviceInformation.rssi
+        print "deviceInformation.id:", deviceInformation.id
+        print "deviceInformation.localName:", deviceInformation.localName
+        print "deviceInformation.adData:", deviceInformation.adData
+        print "deviceInformation.maData:", deviceInformation.maData
+        print "deviceInformation.uuid:", deviceInformation.uuid
+
+        tag = Ruuvi(deviceInformation)
+
+        print "Found Ruu.vi:", tag
+        ruuviDevices.append(tag)
 
     if len(ruuviDevices) == 0:
       ruuviDevices = None
@@ -123,7 +168,7 @@ class RuuviScanner:
     return devices[0]
 
   def discoverAll(self):
-    devices = self._discover(10)
+    devices = self._discover(2)
     if devices is None:
       return None
 
@@ -155,12 +200,11 @@ class Ruuvi:
       return str
 
   def getRealtimeData(self):
+    #print "getRealtimeData", self.eddystoneHash
+    print "getRealtimeData", " ".join("{:02x}".format(c) for c in self.eddystoneHash)
     humidity = self.eddystoneHash[1] * 1.0 / 2.0
 
     temperatureSign = (self.eddystoneHash[2] >> 7) & 1
-    #temperatureBase = self.eddystoneHash[2] & 0x7F
-    #temperatureFraction = (self.eddystoneHash[3] * 1.0) / 100.0
-    #temperature = temperatureBase * 1.0 + temperatureFraction
     temperature =  ((((self.eddystoneHash[2] & 0x7F) << 8) | self.eddystoneHash[3]) * 1.0) / 256.0
 
     if temperatureSign == 1:
