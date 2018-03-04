@@ -180,6 +180,7 @@ class Ruuvi:
     self.eddystoneHash = deviceInformation.adData
     self.id = deviceInformation.id
     self.name = deviceInformation.localName
+    self.mac = deviceInformation.addr
 
   def __str__(self):
     str = '{{name: "{}" addr: "{}"}}'.format(self.name, self._deviceInformation.addr)
@@ -219,7 +220,7 @@ class Ruuvi:
 
     realtimeData = Ruuvi.RealtimeData()
     realtimeData.humidity = humidity
-    realtimeData.temperature = temperature
+    realtimeData.temperature = float("{:.2f}".format(temperature))
     realtimeData.pressure = pressure
     realtimeData.battery = battery
 
