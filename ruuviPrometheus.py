@@ -18,16 +18,16 @@ def main(argv):
     configuration["prometheuspush-server"] = "127.0.0.1"
 
   if configuration.has_key("prometheuspush-port") is False:
-    configuration["prometheuspush-port"] = 1883
+    configuration["prometheuspush-port"] = 9091
 
-  #if configuration.has_key("mqtt-prefix") is False:
-  #  configuration["mqtt-prefix"] = "weather"
+  if configuration.has_key("prometheuspush-prefix") is False:
+    configuration["prometheuspush-prefix"] = "weather"
 
   print "Configuration:"
   print "Prometheus Push Client:   ", configuration["prometheuspush-client"]
   print "Prometheus Push Server:   ", configuration["prometheuspush-server"]
   print "Prometheus Push Port:     ", configuration["prometheuspush-port"]
-  #print "MQTT Prefix   :", configuration["mqtt-prefix"]
+  print "Prometheus Push Prefix   :", configuration["prometheuspush-prefix"]
 
   scanner = RuuviScanner()
   devices = scanner.discoverAll()
@@ -52,13 +52,13 @@ def main(argv):
     registry = CollectorRegistry()
     for key in tag.keys():
 
-      g = Gauge('weather_' + key + '_total', tag[key][0], ['sensorid'], registry=registry)
+      g = Gauge(configuration["prometheuspush-prefix"]  + '_' + key + '_total', tag[key][0], ['sensorid'], registry=registry)
       g.labels(sensorid=sensorId).set(tag[key][1])
 
-      print "Pushing", sensorId, ":", 'weather_' + key + '_total', "=", tag[key]
+      print "Pushing", sensorId, ":", configuration["prometheuspush-prefix"] + '_' + key + '_total', "=", tag[key]
 
     push_to_gateway(configuration["prometheuspush-server"] + ":" + configuration["prometheuspush-port"], 
-      job=configuration["prometheuspush-client"], 
+      job=configuration["prometheuspush-client"] + "_" + sensorId, 
       registry=registry)
 
     time.sleep(1)
