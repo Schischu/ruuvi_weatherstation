@@ -63,7 +63,6 @@ def main(argv):
   scanner = RuuviScanner()
   devices = scanner.discoverAll()
 
-
   influxDbClient = InfluxDBClient(configuration["influxdb-server"], configuration["influxdb-port"], 
     configuration["influxdb-username"], configuration["influxdb-password"], configuration["influxdb-database"])
 
@@ -76,7 +75,7 @@ def main(argv):
     sensorId = device.mac.lower()
 
     tag = {}
-    sensorId = device.mac.lower()
+    sensorId = str(device.mac.lower().replace(":", "")[-4:])
     tag["air_temperature"] = ("Temperature", realtimeData.temperature)
     tag["air_humidity"] = ("Humidity", realtimeData.humidity)
     tag["air_pressure"] = ("Pressure", realtimeData.pressure)
