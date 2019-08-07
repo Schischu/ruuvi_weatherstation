@@ -41,7 +41,7 @@ def main(argv):
     configuration["influxdb-port"] = 8086
 
   if configuration.has_key("influxdb-database") is False:
-    configuration["influxdb-database"] = "autogen"
+    configuration["influxdb-database"] = "measurements"
 
   if configuration.has_key("influxdb-prefix") is False:
     configuration["influxdb-prefix"] = "weather"
@@ -96,21 +96,22 @@ def main(argv):
       job=configuration["prometheuspush-client"] + "_" + sensorId, 
       registry=prometheusRegistry)
 
-    for key in tag.keys():
-      influxDbJson = [
-      {
-        "measurement": key,
-        "tags": {
-            "sensor": sensorId,
-        },
-        "time": lastUtc[1],
-        "fields": {
-        }
-      }]
-      influxDbJson[0]["fields"][tag[key][0]] = tag[key][1]
+    influxDbJson = [
+    {
+      "measurement": configuration["influxdb-prefix"],
+      "tags": {
+          "sensor": sensorId,
+      },
+      "time": lastUtc[1],
+      "fields": {
+      }
+    }]
 
-      print "Pushing", influxDbJson
-      influxDbClient.write_points(influxDbJson)
+    for key in tag.keys():
+      influxDbJson[0]["fields"][key] = tag[key][1]
+
+    print "Pushing", influxDbJson
+    influxDbClient.write_points(influxDbJson)
 
     time.sleep(1)
 
