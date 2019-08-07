@@ -44,7 +44,7 @@ def main(argv):
     configuration["influxdb-database"] = "measurements"
 
   if configuration.has_key("influxdb-prefix") is False:
-    configuration["influxdb-prefix"] = "weather"
+    configuration["influxdb-prefix"] = "sensor.weather"
 
   print "Configuration:"
   print "Prometheus Push Client:   ", configuration["prometheuspush-client"]
