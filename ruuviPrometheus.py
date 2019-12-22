@@ -105,9 +105,12 @@ def main(argv):
 
       print "Pushing", sensorId, ":", configuration["prometheuspush-prefix"] + '_' + key + '_total', "=", tag[key]
 
-    push_to_gateway(configuration["prometheuspush-server"] + ":" + configuration["prometheuspush-port"], 
-      job=configuration["prometheuspush-client"] + "_" + sensorId, 
-      registry=prometheusRegistry)
+    try:
+      push_to_gateway(configuration["prometheuspush-server"] + ":" + configuration["prometheuspush-port"], 
+        job=configuration["prometheuspush-client"] + "_" + sensorId, 
+        registry=prometheusRegistry)
+    except:
+      print "Prometheus not available"
 
     influxDbJson = [
     {
@@ -124,7 +127,10 @@ def main(argv):
       influxDbJson[0]["fields"][key] = tag[key][1]
 
     print "Pushing", influxDbJson
-    influxDbClient.write_points(influxDbJson, retention_policy=configuration["influxdb-policy"])
+    try:
+      influxDbClient.write_points(influxDbJson, retention_policy=configuration["influxdb-policy"])
+    except:
+      print "Influxdb not available"
 
     time.sleep(1)
 
