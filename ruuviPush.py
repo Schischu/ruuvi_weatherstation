@@ -19,14 +19,49 @@ def broadcastMqtt(client, server, port, prefix, postfix, data):
   topic = prefix + "/" + postfix
 
   #print "MQTT Publish", topic, data
-  mqttc.publish(topic, data)
+  mqttc.publish(topic, data, qos=1, retain=True)
 
   mqttc.loop(2)
+
+def broadcastHomie(configuration, topic, value):
+  broadcastMqtt(
+    configuration["mqtt"]["client"], 
+    configuration["mqtt"]["server"], 
+    configuration["mqtt"]["port"], 
+    "homie", 
+    topic,
+    value)
+
+def broadcastHomieDevice(configuration, deviceId, friendlyName, state, nodes, extensions, implementation=None):
+  broadcastHomie(configuration, deviceId + "/$homie", "3.0") #required
+  broadcastHomie(configuration, deviceId + "/$name", friendlyName) #required
+  broadcastHomie(configuration, deviceId + "/$state", state) #required
+  broadcastHomie(configuration, deviceId + "/$nodes", nodes) #required
+  broadcastHomie(configuration, deviceId + "/$extensions", extensions) #required
+
+  if implementation is not None:
+    broadcastHomie(configuration, deviceId + "/$implementation", implementation) #optional
+
+def broadcastHomieNode(configuration, deviceId, nodeId, friendlyName, nodeType, properties):
+  broadcastHomie(configuration, deviceId + "/" + nodeId + "/$name", friendlyName) #required
+  broadcastHomie(configuration, deviceId + "/" + nodeId + "/$type", nodeType) #required
+  broadcastHomie(configuration, deviceId + "/" + nodeId + "/$properties", properties) #required
+
+def broadcastHomieProperty(configuration, deviceId, nodeId, propertyId, friendlyName, dataType, unit):
+  broadcastHomie(configuration, deviceId + "/" + nodeId +  "/" + propertyId + "/$name", friendlyName) #required
+  broadcastHomie(configuration, deviceId + "/" + nodeId +  "/" + propertyId + "/$datatype", dataType) #required
+
+  if unit is not None:
+    broadcastHomie(configuration, deviceId + "/" + nodeId +  "/" + propertyId + "/$unit", unit)
+
+def broadcastHomiePropertyValue(configuration, deviceId, nodeId, propertyId, value):
+  broadcastHomie(configuration, deviceId + "/" + nodeId +  "/" + propertyId, value)
 
 def main(argv):
 
   print("Starting")
 
+  ruuvi = []
   configuration = json.load(open('configuration.json'))
 
   if "mqtt" in configuration:
@@ -41,10 +76,16 @@ def main(argv):
         configuration["mqtt"]["port"] = 1883
 
       if "prefix" not in configuration["mqtt"]:
-        configuration["mqtt"]["prefix"] = "power"
+        configuration["mqtt"]["prefix"] = "weather"
 
       if "enabled" not in configuration["mqtt"]:
         configuration["mqtt"]["enabled"] = True
+
+      if "classic" not in configuration["mqtt"]:
+        configuration["mqtt"]["classic"] = True
+
+      if "homie" not in configuration["mqtt"]:
+        configuration["mqtt"]["homie"] = False
 
       print ("MQTT Configuration:")
       print ("MQTT Client:    ", configuration["mqtt"]["client"])
@@ -52,6 +93,8 @@ def main(argv):
       print ("MQTT Port:      ", configuration["mqtt"]["port"])
       print ("MQTT Prefix:    ", configuration["mqtt"]["prefix"])
       print ("MQTT Enabled:   ", configuration["mqtt"]["enabled"])
+      print ("MQTT Classic:   ", configuration["mqtt"]["classic"])
+      print ("MQTT Homie 3.0: ", configuration["mqtt"]["homie"])
 
     except Exception as ex:
       print ("Error parsing mqtt configuration", ex)
@@ -115,7 +158,7 @@ def main(argv):
         configuration["influxdb"]["policy"] = "sensor"
 
       if "prefix" not in configuration["influxdb"]:
-        configuration["influxdb"]["prefix"] = "power"
+        configuration["influxdb"]["prefix"] = "weather"
 
       if "enabled" not in configuration["influxdb"]:
         configuration["influxdb"]["enabled"] = True
@@ -137,6 +180,9 @@ def main(argv):
   else:
     configuration["influxdb"] = {}
     configuration["influxdb"]["enabled"] = False
+
+  if "ruuvi" in configuration:
+    ruuvi = configuration["ruuvi"]
 
   scanner = RuuviScanner()
   devices = scanner.discoverAll()
@@ -161,26 +207,72 @@ def main(argv):
 
     tag = {}
     sensorId = str(device.mac.lower().replace(":", "")[-4:])
-    tag["air_temperature"] = ("Temperature", realtimeData.temperature)
-    tag["air_humidity"] = ("Humidity", realtimeData.humidity)
-    tag["air_pressure"] = ("Pressure", realtimeData.pressure)
-    tag["battery"] = ("Battery", realtimeData.battery)
+    tag["air_temperature"] = ("Temperature", realtimeData.temperature, "°C")
+    tag["air_humidity"] = ("Humidity", realtimeData.humidity, "mbar")
+    tag["air_pressure"] = ("Pressure", realtimeData.pressure, "%")
+    tag["battery"] = ("Battery", realtimeData.battery, "%")
+    tag["location"] = ("Location", "", "")
+
+    for name in ruuvi:
+      if sensorId == ruuvi:
+        tag["location"][1] = ruuvi["location"]
+        break
 
     now = datetime.utcnow()
     lastUtc = ("Updated", now.strftime("%Y-%m-%dT%H:%M:%SZ")) #2017-11-13T17:44:11Z
 
     if configuration["mqtt"]["enabled"]:
-      print("Pushing Mqtt", sensorId, ":", configuration["mqtt"]["prefix"], tag)
-      try:
-        broadcastMqtt(
-          configuration["mqtt"]["client"], 
-          configuration["mqtt"]["server"], 
-          configuration["mqtt"]["port"], 
-          configuration["mqtt"]["prefix"], 
-          sensorId + "/update",
-          json.dumps(tag))
-      except Exception as ex:
-        print("Error on mqtt broadcast", ex)
+      if configuration["mqtt"]["classic"]:
+        print("Pushing Mqtt", sensorId, ":", configuration["mqtt"]["prefix"], tag)
+        try:
+          broadcastMqtt(
+            configuration["mqtt"]["client"], 
+            configuration["mqtt"]["server"], 
+            configuration["mqtt"]["port"], 
+            configuration["mqtt"]["prefix"], 
+            sensorId + "/update",
+            json.dumps(tag))
+        except Exception as ex:
+          print("Error on mqtt broadcast", ex)
+
+      if configuration["mqtt"]["homie"]:
+        deviceId = configuration["mqtt"]["prefix"] + "-" + sensorId
+
+        # deviceId, friendlyName, state, nodes, extensions, implementation=None
+        broadcastHomieDevice(configuration, deviceId, tag["location"][1], "init", "0", "")
+
+        properties = ""
+        for key in tag.keys():
+            properties = properties + key + ","
+
+        # cut last ,
+        if len(properties) > 0:
+          properties = properties[:-1]
+
+        print ("Pushing Mqtt Homie", sensorId, ":", configuration["mqtt"]["prefix"], tag)
+        try:
+          # deviceId, nodeId, friendlyName, nodeType, properties
+          broadcastHomieNode(configuration, deviceId, "0", "0", configuration["mqtt"]["prefix"], properties)
+        except Exception as ex:
+          print ("Error on homie broadcast", ex)
+
+        try:
+          for key in tag.keys():
+            dataType = "string"
+            if type(tag[key][1]) is int:
+              dataType = "integer"
+            elif type(tag[key][1]) is float:
+              dataType = "float"
+            elif type(tag[key][1]) is bool:
+              dataType = "boolean"
+
+            # deviceId, nodeId, propertyId, friendlyName, dataType, unit
+            broadcastHomieProperty(configuration, deviceId, "0", key, tag[key][0], dataType, tag[key][2])
+
+            # deviceId, nodeId, propertyId, value
+            broadcastHomiePropertyValue(configuration, deviceId, "0", key, tag[key][1])
+        except Exception as ex:
+          print ("Error on homie broadcast", ex)
 
     if configuration["prometheuspush"]["enabled"]:
       prometheusRegistry = CollectorRegistry()
