@@ -61,7 +61,7 @@ def main(argv):
 
   print("Starting")
 
-  ruuvi = []
+  sensors = []
   configuration = json.load(open('configuration.json'))
 
   if "mqtt" in configuration:
@@ -182,7 +182,8 @@ def main(argv):
     configuration["influxdb"]["enabled"] = False
 
   if "ruuvi" in configuration:
-    ruuvi = configuration["ruuvi"]
+    if "sensors" in configuration["ruuvi"]:
+      sensors = configuration["ruuvi"]["sensors"]
 
   scanner = RuuviScanner()
   devices = scanner.discoverAll()
@@ -208,15 +209,21 @@ def main(argv):
     tag = {}
     sensorId = str(device.mac.lower().replace(":", "")[-4:])
     tag["air_temperature"] = ("Temperature", realtimeData.temperature, "°C")
-    tag["air_humidity"] = ("Humidity", realtimeData.humidity, "mbar")
-    tag["air_pressure"] = ("Pressure", realtimeData.pressure, "%")
+    tag["air_humidity"] = ("Humidity", realtimeData.humidity, "%")
+    tag["air_pressure"] = ("Pressure", realtimeData.pressure, "mbar")
     tag["battery"] = ("Battery", realtimeData.battery, "%")
-    tag["location"] = ("Location", "", "")
 
-    for name in ruuvi:
-      if sensorId == ruuvi:
-        tag["location"][1] = ruuvi["location"]
-        break
+    for sensor in sensors:
+      try:
+        if sensorId == sensor["id"]:
+          tag["name"] = ("Name", sensor["name"], "")
+          tag["location"] = ("Location", sensor["location"], "")
+          break
+      except Exception as ex:
+        print("Failed to parse sensor location", ex)
+
+    if "location" not in tag:
+      tag["location"] = ("Location", "", "")
 
     now = datetime.utcnow()
     lastUtc = ("Updated", now.strftime("%Y-%m-%dT%H:%M:%SZ")) #2017-11-13T17:44:11Z
@@ -239,7 +246,7 @@ def main(argv):
         deviceId = configuration["mqtt"]["prefix"] + "-" + sensorId
 
         # deviceId, friendlyName, state, nodes, extensions, implementation=None
-        broadcastHomieDevice(configuration, deviceId, tag["location"][1], "init", "0", "")
+        broadcastHomieDevice(configuration, deviceId, tag["name"][1], "init", "0", "")
 
         properties = ""
         for key in tag.keys():
@@ -258,6 +265,9 @@ def main(argv):
 
         try:
           for key in tag.keys():
+            if key == "name":
+              continue
+
             dataType = "string"
             if type(tag[key][1]) is int:
               dataType = "integer"
