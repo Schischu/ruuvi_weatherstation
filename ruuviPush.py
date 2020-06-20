@@ -27,10 +27,6 @@ def main(argv):
 
   print "Starting"
 
-  haveMqtt = False
-  havePrometheus = False
-  haveInfluxDb = False
-
   configuration = json.load(open('configuration.json'))
 
   if configuration.has_key("mqtt"):
@@ -47,16 +43,22 @@ def main(argv):
       if configuration["mqtt"].has_key("prefix") is False:
         configuration["mqtt"]["prefix"] = "weather"
 
+      if configuration["mqtt"].has_key("enabled") is False:
+        configuration["mqtt"]["enabled"] = True
+
       print "MQTT Configuration:"
       print "MQTT Client:   ", configuration["mqtt"]["client"]
       print "MQTT Server:   ", configuration["mqtt"]["server"]
       print "MQTT Port:     ", configuration["mqtt"]["port"]
-      print "MQTT Prefix   :", configuration["mqtt"]["prefix"]
-
-      haveMqtt = True
+      print "MQTT Prefix:   ", configuration["mqtt"]["prefix"]
+      print "MQTT Enabled:  ", configuration["mqtt"]["enabled"]
 
     except Exception, ex:
       print "Error parsing mqtt configuration", ex
+      configuration["mqtt"]["enabled"] = False
+  else:
+    configuration["mqtt"] = {}
+    configuration["mqtt"]["enabled"] = False
 
   if configuration.has_key("prometheuspush"):
     try:
@@ -72,16 +74,22 @@ def main(argv):
       if configuration["prometheuspush"].has_key("prefix") is False:
         configuration["prometheuspush"]["prefix"] = "weather"
 
+      if configuration["prometheuspush"].has_key("enabled") is False:
+        configuration["prometheuspush"]["enabled"] = True
+
       print "Prometheus Push Configuration:"
       print "Prometheus Push Client:   ", configuration["prometheuspush"]["client"]
       print "Prometheus Push Server:   ", configuration["prometheuspush"]["server"]
       print "Prometheus Push Port:     ", configuration["prometheuspush"]["port"]
-      print "Prometheus Push Prefix    ", configuration["prometheuspush"]["prefix"]
-
-      havePrometheus = True
+      print "Prometheus Push Prefix:   ", configuration["prometheuspush"]["prefix"]
+      print "Prometheus Push Enabled:  ", configuration["prometheuspush"]["enabled"]
 
     except Exception, ex:
       print "Error parsing prometheuspush configuration", ex
+      configuration["prometheuspush"]["enabled"] = False
+  else:
+    configuration["prometheuspush"] = {}
+    configuration["prometheuspush"]["enabled"] = False
 
   if configuration.has_key("influxdb"):
     try:
@@ -109,25 +117,31 @@ def main(argv):
       if configuration["influxdb"].has_key("prefix") is False:
         configuration["influxdb"]["prefix"] = "weather"
 
+      if configuration["influxdb"].has_key("enabled") is False:
+        configuration["influxdb"]["enabled"] = True
+
       print "Influxdb Configuration:"
       print "Influxdb Client:     ", configuration["influxdb"]["client"]
       print "Influxdb Username:   ", configuration["influxdb"]["username"]
       print "Influxdb Password:   ", configuration["influxdb"]["password"]
       print "Influxdb Server:     ", configuration["influxdb"]["server"]
       print "Influxdb Port:       ", configuration["influxdb"]["port"]
-      print "Influxdb Database    ", configuration["influxdb"]["database"]
-      print "Influxdb Policy      ", configuration["influxdb"]["policy"]
-      print "Influxdb Prefix      ", configuration["influxdb"]["prefix"]
-
-      haveInfluxDb = True
+      print "Influxdb Database:   ", configuration["influxdb"]["database"]
+      print "Influxdb Policy:     ", configuration["influxdb"]["policy"]
+      print "Influxdb Prefix:     ", configuration["influxdb"]["prefix"]
+      print "Influxdb Enabled:    ", configuration["influxdb"]["enabled"]
 
     except Exception, ex:
       print "Error parsing influxdb configuration", ex
+      configuration["influxdb"]["enabled"] = False
+  else:
+    configuration["influxdb"] = {}
+    configuration["influxdb"]["enabled"] = False
 
   scanner = RuuviScanner()
   devices = scanner.discoverAll()
 
-  if haveInfluxDb:
+  if configuration["influxdb"]["enabled"]:
     influxDbClient = InfluxDBClient(configuration["influxdb"]["server"], configuration["influxdb"]["port"], 
       configuration["influxdb"]["username"], configuration["influxdb"]["password"], configuration["influxdb"]["database"])
 
@@ -155,8 +169,8 @@ def main(argv):
     now = datetime.utcnow()
     lastUtc = ("Updated", now.strftime("%Y-%m-%dT%H:%M:%SZ")) #2017-11-13T17:44:11Z
 
-    if haveMqtt:
-      #print "Pushing Mqtt", influxDbJson
+    if configuration["mqtt"]["enabled"]:
+      print "Pushing Mqtt", sensorId, ":", configuration["mqtt"]["prefix"], tag
       try:
         broadcastMqtt(
           configuration["mqtt"]["client"], 
@@ -168,15 +182,14 @@ def main(argv):
       except Exception, ex:
         print "Error on mqtt broadcast", ex
 
-    if havePrometheus:
+    if configuration["prometheuspush"]["enabled"]:
       prometheusRegistry = CollectorRegistry()
       for key in tag.keys():
 
         g = Gauge(configuration["prometheuspush"]["prefix"]  + '_' + key + '_total', tag[key][0], ['sensorid'], registry=prometheusRegistry)
         g.labels(sensorid=sensorId).set(tag[key][1])
 
-        #print "Pushing Prometheus", sensorId, ":", configuration["prometheuspush-prefix"] + '_' + key + '_total', "=", tag[key]
-
+      print "Pushing Prometheus", sensorId, ":", configuration["prometheuspush"]["prefix"] + '_' + key + '_total', "=", tag[key]
       try:
         push_to_gateway(configuration["prometheuspush"]["server"] + ":" + configuration["prometheuspush"]["port"], 
           job=configuration["prometheuspush"]["client"] + "_" + sensorId, 
@@ -184,7 +197,7 @@ def main(argv):
       except Exception, ex:
         print "Error on prometheus push", ex
 
-    if haveInfluxDb:
+    if configuration["influxdb"]["enabled"]:
       influxDbJson = [
       {
         "measurement": configuration["influxdb"]["prefix"],
@@ -199,7 +212,7 @@ def main(argv):
       for key in tag.keys():
         influxDbJson[0]["fields"][key] = tag[key][1]
 
-      #print "Pushing InfluxDb", influxDbJson
+      print "Pushing InfluxDb", influxDbJson
       try:
         influxDbClient.write_points(influxDbJson, retention_policy=configuration["influxdb"]["policy"])
       except Exception, ex:
