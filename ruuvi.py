@@ -8,7 +8,6 @@ import base64
 
 from bluepy.btle import UUID, Peripheral, Scanner, DefaultDelegate, BTLEException
 
-
 STRUCT_UInt8LE = 'B'
 STRUCT_UInt16LE = 'H'
 STRUCT_UInt32LE = 'I'
@@ -46,7 +45,7 @@ class RuuviScanner:
       return False
 
     if adData[0] != 0xAA or adData[1] != 0xFE:
-      #print "Not Eddystone:", adData[0], adData[1]
+      #print("Not Eddystone:", adData[0], adData[1])
       return False
 
     return True
@@ -78,17 +77,17 @@ class RuuviScanner:
     if url is None:
       return None
 
-    print "url:", " ".join("{:02x}".format(c) for c in url)
-    print "url", url
+    print("url:", " ".join("{:02x}".format(c) for c in url))
+    print("url", url)
 
     base64Hash = url[8:-1]
     #base64Hash = url[8:]
 
-    print "base64Hash[", len(base64Hash), "]: ", " ".join("{:02x}".format(c) for c in base64Hash)
-    print "base64Hash", base64Hash
+    print("base64Hash[", len(base64Hash), "]: ", " ".join("{:02x}".format(c) for c in base64Hash))
+    print("base64Hash", base64Hash)
 
     hashStr = base64.b64decode(base64Hash)
-    print "hashStr", hashStr
+    print("hashStr", hashStr)
     hash = bytearray (hashStr)
     return hash
 
@@ -103,7 +102,7 @@ class RuuviScanner:
 
     ruuviDevices = []
     for device in devices:
-      #print device.getScanData()
+      #print(device.getScanData())
 
       deviceInformation = DeviceInformation()
       deviceInformation.addr         = device.addr
@@ -125,12 +124,12 @@ class RuuviScanner:
         hexAdData =  bytearray.fromhex(deviceInformation.adData)
         if self._isEddystoneAdvertismentData(hexAdData):
 
-          print "Skipping", deviceInformation.addr
+          print("Skipping", deviceInformation.addr)
           continue
           deviceInformation.localName = "Ruu.vi"
 
-          #print "deviceInformation.adData:", " ".join("{:02x}".format(ord(c)) for c in deviceInformation.adData)
-          #print "hexAdData:", " ".join("{:02x}".format(c) for c in hexAdData)
+          #print("deviceInformation.adData:", " ".join("{:02x}".format(ord(c)) for c in deviceInformation.adData))
+          #print("hexAdData:", " ".join("{:02x}".format(c) for c in hexAdData))
 
           eddystoneUrl = self._parseEddystoneUrl(hexAdData)
           eddystoneHash = self._parseEddystoneUrlHash(eddystoneUrl)
@@ -142,7 +141,7 @@ class RuuviScanner:
           foundRuuvi = True
 
         #else:
-        #  print "Ignored:",  deviceInformation.addr, "(Cause: Not Eddystone", hexAdData[0], hexAdData[1], ")"
+        #  print("Ignored:",  deviceInformation.addr, "(Cause: Not Eddystone", hexAdData[0], hexAdData[1], ")")
       elif deviceInformation.maData is not None:
         hexMaData =  bytearray.fromhex(deviceInformation.maData)
         #print "deviceInformation.maData:", hexMaData
@@ -155,24 +154,24 @@ class RuuviScanner:
           #9904034e1a2eb3dbffec000c03e80c1900000000
 
       #else:
-      #  print "Ignored:",  deviceInformation.addr, "(Cause: No adData and no maData)"
+      #  print("Ignored:",  deviceInformation.addr, "(Cause: No adData and no maData)")
 
       if foundRuuvi:
-        print "-"*60
-        print "deviceInformation.flags:", deviceInformation.flags
-        print "deviceInformation.addr:", deviceInformation.addr
-        print "deviceInformation.rssi:", deviceInformation.rssi
-        print "deviceInformation.id:", deviceInformation.id
-        print "deviceInformation.localName:", deviceInformation.localName
-        #print "deviceInformation.adData:", deviceInformation.adData
+        print("-"*60)
+        print("deviceInformation.flags:", deviceInformation.flags)
+        print("deviceInformation.addr:", deviceInformation.addr)
+        print("deviceInformation.rssi:", deviceInformation.rssi)
+        print("deviceInformation.id:", deviceInformation.id)
+        print("deviceInformation.localName:", deviceInformation.localName)
+        #print("deviceInformation.adData:", deviceInformation.adData)
 
-        #print "deviceInformation.adData:", " ".join("{:02x}".format(c) for c in deviceInformation.adData)
-        #print "deviceInformation.maData:", deviceInformation.maData
-        print "deviceInformation.uuid:", deviceInformation.uuid
+        #print("deviceInformation.adData:", " ".join("{:02x}".format(c) for c in deviceInformation.adData))
+        #print("deviceInformation.maData:", deviceInformation.maData)
+        print("deviceInformation.uuid:", deviceInformation.uuid)
 
         tag = Ruuvi(deviceInformation)
 
-        print "Found Ruu.vi:", tag
+        print("Found Ruu.vi:", tag)
         ruuviDevices.append(tag)
 
     if len(ruuviDevices) == 0:
@@ -231,8 +230,8 @@ class Ruuvi:
 #00 00 00 00
 
   def getRealtimeData(self):
-    #print "getRealtimeData", self.eddystoneHash
-    print "getRealtimeData", " ".join("{:02x}".format(c) for c in self.eddystoneHash)
+    #print("getRealtimeData", self.eddystoneHash)
+    print("getRealtimeData", " ".join("{:02x}".format(c) for c in self.eddystoneHash))
     humidity = self.eddystoneHash[1] * 1.0 / 2.0
 
     temperatureSign = (self.eddystoneHash[2] >> 7) & 1
@@ -257,13 +256,13 @@ class Ruuvi:
     return realtimeData
 
 def main(argv):
-  print "Starting"
+  print("Starting")
   scanner = RuuviScanner()
   devices = scanner.discoverAll()
 
   for device in devices:
-    print device
-    print "RealtimeData", device.getRealtimeData()
+    print(device)
+    print("RealtimeData", device.getRealtimeData())
 
 if __name__ == "__main__":
   main(sys.argv)
